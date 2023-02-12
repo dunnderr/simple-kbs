@@ -52,13 +52,13 @@ impl KbsDb {
     pub async fn new() -> Result<Self> {
         let db_type = env::var("KBS_DB_TYPE")
             .map_err(|e| anyhow!("KbsDb::new() - env var KBS_DB_TYPE parse error = {}", e))?;
-        let host_name = env::var("KBS_DB_HOST")
+        let db_host = env::var("KBS_DB_HOST")
             .map_err(|e| anyhow!("KbsDb::new() - env var KBS_DB_HOST parse error = {}", e))?;
-        let user_name = env::var("KBS_DB_USER")
+        let db_user = env::var("KBS_DB_USER")
             .map_err(|e| anyhow!("KbsDb::new() - env var KBS_DB_USER parse error = {}", e))?;
         let db_pw = env::var("KBS_DB_PW")
             .map_err(|e| anyhow!("KbsDb::new() - env var KBS_DB_PW parse error = {}", e))?;
-        let data_base = env::var("KBS_DB")
+        let db_name = env::var("KBS_DB")
             .map_err(|e| anyhow!("KbsDb::new() - env var KBS_DB parse error = {}", e))?;
 
         let max_conns = match env::var("KBS_DB_MAX_CONNS") {
@@ -66,13 +66,9 @@ impl KbsDb {
             Err(_e) => 1000u32,
         };
 
-        let db_url = if db_type == "sqlite" {
-            format!("{}://{}", db_type, data_base)
-        } else {
-            format!(
-                "{}://{}:{}@{}/{}",
-                db_type, user_name, db_pw, host_name, data_base
-            )
+        let db_url = match &db_type[..] {
+            "sqlite" => format!("{db_type}://{db_name}"),
+            _ => format!("{db_type}://{db_user}:{db_pw}@{db_host}/{db_name}"),
         };
 
         let dbpool = AnyPoolOptions::new()
@@ -80,10 +76,7 @@ impl KbsDb {
             .connect(&db_url)
             .await
             .map_err(|e| {
-                anyhow!(
-                    "db::get_db_pool:: Encountered error trying to create database pool: {}",
-                    e
-                )
+                anyhow!("db::get_db_pool:: Encountered error trying to create database pool: {e}")
             })?;
         Ok(Self { dbpool })
     }
@@ -98,7 +91,7 @@ impl KbsDb {
         let mut counter = 0;
         let result = question_mark_re.replace_all(sql, |_: &Captures| {
             counter += 1;
-            format!("${}", counter)
+            format!("${counter}")
         });
         result.to_string()
     }
